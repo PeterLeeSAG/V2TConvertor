@@ -136,7 +136,7 @@ internal static class Program
         return failures == 0 ? 0 : 2;
     }
 
-    private static IEnumerable<string> DiscoverFiles(string input)
+    internal static IEnumerable<string> DiscoverFiles(string input)
     {
         if (File.Exists(input))
         {
@@ -155,23 +155,27 @@ internal static class Program
         }
     }
 
-    private static bool IsSupported(string path) =>
+    internal static bool IsSupported(string path) =>
         SupportedExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
 
-    private static byte[] LoadAs16kMonoPcm(string inputPath)
+    internal static byte[] LoadAs16kMonoPcm(string inputPath)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "ffmpeg",
+            FileName = ResolveFfmpegExecutable(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        psi.ArgumentList.Add("-nostdin");
         psi.ArgumentList.Add("-v");
         psi.ArgumentList.Add("error");
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(inputPath);
+        psi.ArgumentList.Add("-map");
+        psi.ArgumentList.Add("0:a:0");
+        psi.ArgumentList.Add("-vn");
         psi.ArgumentList.Add("-ar");
         psi.ArgumentList.Add(SampleRate.ToString(CultureInfo.InvariantCulture));
         psi.ArgumentList.Add("-ac");
@@ -206,7 +210,33 @@ internal static class Program
         return ms.ToArray();
     }
 
-    private static List<Chunk> BuildTimelineChunks(byte[] pcm)
+    internal static string ResolveFfmpegExecutable()
+    {
+        string? path = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            foreach (string directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string candidate = Path.Combine(directory.Trim(), OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            string winGetLink = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Microsoft",
+                "WinGet",
+                "Links",
+                "ffmpeg.exe");
+            if (File.Exists(winGetLink)) return winGetLink;
+        }
+
+        return "ffmpeg";
+    }
+
+    internal static List<Chunk> BuildTimelineChunks(byte[] pcm)
     {
         int totalSamples = pcm.Length / BytesPerSample;
         int windowSamples = SampleRate * WindowMs / 1000;
@@ -277,7 +307,7 @@ internal static class Program
         return count == 0 ? 0.0 : Math.Sqrt(sum / count);
     }
 
-    private static string EncodeToWavBase64(byte[] pcm)
+    internal static string EncodeToWavBase64(byte[] pcm)
     {
         const int headerSize = 44;
         int dataLen = pcm.Length;
@@ -306,7 +336,7 @@ internal static class Program
         return Convert.ToBase64String(wav);
     }
 
-    private static async Task<string> TranscribeChunkAsync(
+    internal static async Task<string> TranscribeChunkAsync(
         HttpClient http, string endpoint, string model, string wavBase64)
     {
         var payload = new
@@ -406,6 +436,6 @@ internal static class Program
         return string.Create(CultureInfo.InvariantCulture, $"{h:00}:{t.Minutes:00}:{t.Seconds:00}");
     }
 
-    private sealed record Chunk(int StartMs, int EndMs, byte[] Pcm);
+    internal sealed record Chunk(int StartMs, int EndMs, byte[] Pcm);
     private sealed record Segment(int StartMs, int EndMs, string Text);
 }

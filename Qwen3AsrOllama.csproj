@@ -8,4 +8,8 @@
     <RootNamespace>Qwen3AsrOllama</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Qwen3AsrOllama.Tests" />
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>
